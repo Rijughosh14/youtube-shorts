@@ -1,0 +1,48 @@
+
+  
+  .video-controls {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    opacity: 1; 
+    display: none;
+    z-index: 10;
+  }
+  
+
+  .video-controls i {  
+    color: #fff;
+    font-size: 44px;
+    margin: auto;
+    height: fit-content;
+  }
+
+  .video-controls.show{
+    display: flex;
+    cursor: pointer;
+  } 
+
+  @media screen and (min-width:484px) {
+    .phone-like{
+      display: none;
+    }
+  }
+
+  @media screen and (max-width:484px) {
+    .phone-like{
+      display: flex;
+      color: white;
+      position: absolute;
+      top: 42%;
+
+    }
+    .phone-like i{
+      color: black;
+      font-size: 32px;
+    }
+  }
+
+  
