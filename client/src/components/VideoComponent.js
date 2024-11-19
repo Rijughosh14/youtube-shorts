@@ -1,189 +1,237 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { GetVideos } from '../services/UserService'
-import LikesComponents from './LikesComponents'
-import NavigationComponent from './NavigationComponent'
-
+import React, { useEffect, useRef, useState } from 'react';
+import { GetVideos } from '../services/UserService';
+import LikesComponents from './LikesComponents';
+import NavigationComponent from './NavigationComponent';
 
 const VideoComponent = () => {
-
-  const [Video, SetVideo] = useState([])
+  const [videos, setVideos] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
-  const videoRef = useRef(null)
-  const [Like, SetLike] = useState([])
-  const [currentIndex, SetCurrentIndex] = useState(0)
+  const [likes, setLikes] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-
+  const [isLoading, setIsLoading] = useState(true);
+  const videoRef = useRef(null);
   const touchStartY = useRef(0);
-
-
+  const playbackPromiseRef = useRef(null);
 
   const getdata = async () => {
-    const result = await GetVideos()
-    SetVideo(result.hits)
-    const likeResult =
-      result.hits.map((item) =>
-      ({
+    try {
+      setIsLoading(true);
+      const result = await GetVideos();
+      setVideos(result.hits);
+      const likeResult = result.hits.map((item) => ({
         like: item.likes,
         isLiked: false
-      }))
-    SetLike(likeResult)
+      }));
+      setLikes(likeResult);
 
-    if (videoRef.current) {
-      videoRef.current.src = result.hits[currentIndex].videos.large.url
+      if (videoRef.current) {
+        videoRef.current.src = result.hits[currentIndex].videos.large.url;
+        // Automatically play the first video after setting the source
+        safePlayVideo();
+      }
+    } catch (error) {
+      console.error('Failed to fetch videos:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }
-
-
-  const handleCurrentVideo = (value) => {
-    SetCurrentIndex(currentIndex + value)
-    if (videoRef.current) {
-      videoRef.current.src = Video[currentIndex + value].videos.large.url
-      videoRef.current.play();
-    }
-    setProgress(0)
-    setIsPlaying(true)
   };
 
-  const handleVideoClick = (event) => {
-    event.stopPropagation()
+  const safePlayVideo = async () => {
     if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause()
-      }
-      else {
-        videoRef.current.play()
+      try {
+        setIsLoading(true);
+        playbackPromiseRef.current = videoRef.current.play();
+        await playbackPromiseRef.current;
+        setIsPlaying(true);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Playback failed:', error);
+          setIsPlaying(false);
+        }
+      } finally {
+        setIsLoading(false);
       }
     }
+  };
 
-    setIsPlaying(!isPlaying);
+  const safePauseVideo = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  const handleCurrentVideo = async (value) => {
+    setCurrentIndex(prev => {
+      const newIndex = prev + value;
+      if (newIndex >= 0 && newIndex < videos.length) {
+        if (videoRef.current) {
+          safePauseVideo();
+          videoRef.current.src = videos[newIndex].videos.large.url;
+          safePlayVideo();
+        }
+        setProgress(0);
+        return newIndex;
+      }
+      return prev;
+    });
+  };
+
+  const handleVideoClick = async (event) => {
+    event.stopPropagation();
+    if (isLoading) return;
+
+    if (isPlaying) {
+      safePauseVideo();
+    } else {
+      safePlayVideo();
+    }
   };
 
   const handleChangeLike = (index, value, condition) => {
-    SetLike((prev) =>
+    setLikes(prev =>
       prev.map((item, i) =>
         i === index ? { like: value, isLiked: condition } : item
       )
     );
   };
 
-  const handleShowButton = () => {
-    const controls = document.querySelector('.video-controls');
-
-    controls.classList.add('show');
-
-    setTimeout(() => {
-      controls.classList.remove('show');
-    }, 3000);
-  }
-
   const handleTouchStart = (e) => {
     touchStartY.current = e.touches[0].clientY;
   };
 
   const handleTouchEnd = (e) => {
+    if (isLoading) return;
+
     const touchEndY = e.changedTouches[0].clientY;
     const deltaY = touchEndY - touchStartY.current;
 
-    if (deltaY > 50) {
-      handleCurrentVideo(-1)
-    }
-    else if (deltaY < -50) {
-      handleCurrentVideo(1)
+    if (deltaY > 50 && currentIndex > 0) {
+      handleCurrentVideo(-1);
+    } else if (deltaY < -50 && currentIndex < videos.length - 1) {
+      handleCurrentVideo(1);
     }
   };
 
-
   useEffect(() => {
-    getdata()
-  }, [])
-
-  useEffect(() => {
-    const handleVideoEnded = () => {
-      setIsPlaying(false);
-    };
-
-    if (videoRef.current) {
-      videoRef.current.addEventListener('ended', handleVideoEnded);
-    }
-
+    getdata();
     return () => {
       if (videoRef.current) {
-        videoRef.current.removeEventListener('ended', handleVideoEnded);
+        videoRef.current.pause();
+        videoRef.current.src = '';
       }
     };
   }, []);
 
   useEffect(() => {
-    const updateProgress = () => {
-      const video = videoRef.current;
-      const percentage = (video.currentTime / video.duration) * 100;
-      setProgress(percentage);
+    const handleVideoEnded = () => {
+      setIsPlaying(false);
+      // Optionally, you can auto-play the next video when current one ends
+      if (currentIndex < videos.length - 1) {
+        handleCurrentVideo(1);
+      }
+    };
+
+    const handleVideoError = (error) => {
+      console.error('Video error:', error);
+      setIsPlaying(false);
+      setIsLoading(false);
     };
 
     const video = videoRef.current;
-
-    video.addEventListener('timeupdate', updateProgress);
+    if (video) {
+      video.addEventListener('ended', handleVideoEnded);
+      video.addEventListener('error', handleVideoError);
+    }
 
     return () => {
-      video.removeEventListener('timeupdate', updateProgress);
+      if (video) {
+        video.removeEventListener('ended', handleVideoEnded);
+        video.removeEventListener('error', handleVideoError);
+      }
     };
+  }, [currentIndex, videos.length]); // Added dependencies for handleVideoEnded
+
+  useEffect(() => {
+    const updateProgress = () => {
+      const video = videoRef.current;
+      if (video) {
+        const percentage = (video.currentTime / video.duration) * 100;
+        setProgress(percentage);
+      }
+    };
+
+    const video = videoRef.current;
+    if (video) {
+      video.addEventListener('timeupdate', updateProgress);
+      return () => {
+        video.removeEventListener('timeupdate', updateProgress);
+      };
+    }
   }, []);
 
   return (
-    <div className='h-screen m-auto flex flex-row py-2'>
-      <div className='sm:flex hidden'>
+    <div className="flex flex-col md:flex-row items-center justify-center w-full max-w-6xl gap-4">
+      {/* Navigation Component - Now outside on larger screens */}
+      <div className="hidden md:flex items-center justify-center">
         <NavigationComponent
           handleCurrentVideo={handleCurrentVideo}
           currentIndex={currentIndex}
         />
       </div>
-      <div className='h-full bg-gray-700 shadow-lg rounded-xl max-w-[384px] w-auto relative video-container'
-        onMouseOver={handleShowButton}
-        onClick={handleShowButton}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div className='video-controls '
+
+      {/* Video Container */}
+      <div className="relative flex flex-col items-center justify-center w-full sm:w-[384px] bg-black rounded-xl overflow-hidden">
+        <div
+          className="relative w-full aspect-[9/16]"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onClick={handleVideoClick}
         >
-          {isPlaying ? (
-            <div className=' m-auto  hover:cursor-pointer' onClick={handleVideoClick}>
-              <i className={`fa-solid fa-pause fa-2xl`} ></i>
-            </div>
-          ) : (
-            <div className=' m-auto hover:cursor-pointer'
-              onClick={handleVideoClick}>
-              <i className='fa-solid fa-play fa-2xl ' ></i>
+          <video
+            ref={videoRef}
+            className="absolute inset-0 h-full w-full object-cover"
+            playsInline
+            muted // Added muted attribute to ensure autoplay works on most browsers
+          />
+          
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+              <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          <div className='phone-like right-0'>
-            <LikesComponents
-              index={currentIndex}
-              data={Like[currentIndex]}
-              handleChangeLike={handleChangeLike}
-            />
-          </div>
-          <div
-            className=" w-[97%] rounded-xl relative"
-          >
-            <div
-              style={{ width: `${progress}%` }}
-              className='bg-gray-300 h-2 absolute bottom-0 left-0 rounded-xl'
-            >
+
+          {/* Progress Bar */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent">
+            <div className="relative w-full h-1 bg-gray-600 rounded-full">
+              <div 
+                className="absolute top-0 left-0 h-full bg-white rounded-full transition-all"
+                style={{ width: `${progress}%` }}
+              />
             </div>
           </div>
         </div>
-        <video className='h-full w-full cursor-pointer' ref={videoRef}>
-        </video>
-      </div>
-      <div className='sm:flex hidden'>
-        <LikesComponents
-          index={currentIndex}
-          data={Like[currentIndex]}
-          handleChangeLike={handleChangeLike}
-        />
+
+        {/* Likes Component */}
+        <div className="absolute top-1/2 right-4 transform -translate-y-1/2 z-10">
+          <LikesComponents
+            index={currentIndex}
+            data={likes[currentIndex]}
+            handleChangeLike={handleChangeLike}
+          />
+        </div>
+
+        {/* Mobile Navigation - Only visible on small screens */}
+        <div className="md:hidden absolute top-1/2 left-4 transform -translate-y-1/2 z-10">
+          <NavigationComponent
+            handleCurrentVideo={handleCurrentVideo}
+            currentIndex={currentIndex}
+          />
+        </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default VideoComponent
+export default VideoComponent;

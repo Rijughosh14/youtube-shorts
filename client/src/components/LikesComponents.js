@@ -1,28 +1,30 @@
-import React from 'react'
+import React from 'react';
+import { Heart } from 'lucide-react';
 
-const LikesComponents = ({index,data,handleChangeLike}) => {
-
-    const handleLike=()=>{
-        if(data&&data.isLiked){
-            handleChangeLike(index,data.like-1,false)
-        }
-        else{
-            handleChangeLike(index,data.like+1,true)
+const LikesComponents = ({index, data, handleChangeLike}) => {
+    const handleLike = () => {
+        if(data && data.isLiked) {
+            handleChangeLike(index, data.like-1, false);
+        } else {
+            handleChangeLike(index, data.like+1, true);
         }
     }
+    
     return (
         <div className='my-auto pl-1 flex flex-col items-center gap-2'>
-            <div className='rounded-full bg-gray-100 p-3'>
-            <i className="fa-regular fa-thumbs-up fa-2xl hover:cursor-pointer" 
-            style={{"color":(data&&data.isLiked)?"blue":""}} 
-            onClick={handleLike}>
-            </i>
-            </div>
-            <p className='text-lg font-semibold'>
-                {data&&data.like}
-            </p>
+            <button
+                className="p-2 rounded-full bg-white/10 backdrop-blur-lg hover:bg-white/20 transition-colors"
+                onClick={handleLike}
+            >
+                <Heart 
+                    className={`h-6 w-6 ${data?.isLiked ? 'fill-red-500 text-red-500' : 'text-white'}`}
+                />
+            </button>
+            <span className="text-white text-sm font-medium">
+                {data?.like || 0}
+            </span>
         </div>
-    )
+    );
 }
 
-export default LikesComponents
+export default LikesComponents;
